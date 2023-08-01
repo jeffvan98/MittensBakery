@@ -1,0 +1,470 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "GetProductIDFromTable": {
+                "type": "ServiceProvider",
+                "inputs": {
+                    "parameters": {
+                        "tableName": "ProductManagementConsumer",
+                        "top": 1
+                    },
+                    "serviceProviderConfiguration": {
+                        "connectionName": "azureTables",
+                        "operationId": "queryEntities",
+                        "serviceProviderId": "/serviceProviders/azureTables"
+                    }
+                },
+                "runAfter": {}
+            },
+            "Condition": {
+                "type": "If",
+                "expression": {
+                    "and": [
+                        {
+                            "not": {
+                                "equals": [
+                                    "@empty(body('GetProductIDFromTable')?['entities'])",
+                                    true
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "actions": {
+                    "ParseProductIDJson": {
+                        "type": "ParseJson",
+                        "inputs": {
+                            "content": "@first(body('GetProductIDFromTable')?['entities'])",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "odata.etag": {
+                                        "type": "string"
+                                    },
+                                    "PartitionKey": {
+                                        "type": "string"
+                                    },
+                                    "RowKey": {
+                                        "type": "string"
+                                    },
+                                    "Timestamp": {
+                                        "type": "string"
+                                    },
+                                    "ProductID": {
+                                        "type": "integer"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "SetProductIDFromTable": {
+                        "type": "SetVariable",
+                        "inputs": {
+                            "name": "ProductID",
+                            "value": "@body('ParseProductIDJson')?['ProductID']"
+                        },
+                        "runAfter": {
+                            "ParseProductIDJson": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    }
+                },
+                "else": {
+                    "actions": {
+                        "SetProductID": {
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "ProductID",
+                                "value": 0
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "InitializeProductID": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "InitializeProductID": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "ProductID",
+                            "type": "integer",
+                            "value": 0
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "GetProductIDFromTable": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Until": {
+                "type": "Until",
+                "expression": "@equals(variables('HasNextPage'),false)",
+                "limit": {
+                    "count": 60,
+                    "timeout": "PT1H"
+                },
+                "actions": {
+                    "ParseProductsFromProductManagement": {
+                        "type": "ParseJson",
+                        "inputs": {
+                            "content": "@body('GetProductsFromProductManagement')",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "data": {
+                                        "type": "object",
+                                        "properties": {
+                                            "products": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "nodes": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "productId": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "productId",
+                                                                "name"
+                                                            ]
+                                                        }
+                                                    },
+                                                    "pageInfo": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "hasNextPage": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "endCursor": {
+                                                                "type": [
+                                                                    "string",
+                                                                    "null"
+                                                                ]
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "GetProductsFromProductManagement": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    },
+                    "IfHasNextPage": {
+                        "type": "If",
+                        "expression": {
+                            "and": [
+                                {
+                                    "equals": [
+                                        "@variables('HasNextPage')",
+                                        true
+                                    ]
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "SetQueryWithCursor": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "Query",
+                                    "value": "@{concat('{\"query\": \"query {products(where: {productId : {gt: ', variables('ProductID'), '}} after: \\\"', variables('Cursor'), '\\\") {nodes { productId name} pageInfo {hasNextPage endCursor}}}\"}')}"
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {
+                                "SetQueryWithoutCursor": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "Query",
+                                        "value": "@{concat('{\"query\": \"query {products(where: {productId : {gt: ', variables('ProductID'), '}}) {nodes { productId name} pageInfo {hasNextPage endCursor}}}\"}')}"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "GetProductsFromProductManagement": {
+                        "type": "Http",
+                        "inputs": {
+                            "uri": "@parameters('ProductManagementServiceURL')",
+                            "method": "POST",
+                            "headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "body": "@variables('Query')"
+                        },
+                        "runAfter": {
+                            "IfHasNextPage": [
+                                "SUCCEEDED"
+                            ]
+                        },
+                        "runtimeConfiguration": {
+                            "contentTransfer": {
+                                "transferMode": "Chunked"
+                            }
+                        }
+                    },
+                    "IfTheresWorkToDo": {
+                        "type": "If",
+                        "expression": {
+                            "and": [
+                                {
+                                    "greater": [
+                                        "@length(body('ParseProductsFromProductManagement')?['data']?['products']?['nodes'])",
+                                        0
+                                    ]
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "SetLastProductID": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "LastProductID",
+                                    "value": "@last(body('ParseProductsFromProductManagement')?['data']?['products']?['nodes'])?['productId']"
+                                },
+                                "runAfter": {
+                                    "SetCursor": [
+                                        "SUCCEEDED"
+                                    ]
+                                }
+                            },
+                            "ForEachNode": {
+                                "type": "Foreach",
+                                "foreach": "@body('ParseProductsFromProductManagement')?['data']?['products']?['nodes']",
+                                "actions": {
+                                    "Compose": {
+                                        "type": "Compose",
+                                        "inputs": {
+                                            "Product": "@items('ForEachNode')?['name']"
+                                        }
+                                    },
+                                    "Send_message": {
+                                        "type": "ServiceProvider",
+                                        "inputs": {
+                                            "parameters": {
+                                                "entityName": "@parameters('ProductManagementQueue')",
+                                                "message": {
+                                                    "contentData": "@outputs('Compose')",
+                                                    "contentType": "application/json"
+                                                }
+                                            },
+                                            "serviceProviderConfiguration": {
+                                                "connectionName": "serviceBus",
+                                                "operationId": "sendMessage",
+                                                "serviceProviderId": "/serviceProviders/serviceBus"
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "Compose": [
+                                                "SUCCEEDED"
+                                            ]
+                                        }
+                                    }
+                                },
+                                "runAfter": {
+                                    "SetLastProductID": [
+                                        "SUCCEEDED"
+                                    ]
+                                }
+                            },
+                            "SetCursor": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "Cursor",
+                                    "value": "@body('ParseProductsFromProductManagement')?['data']?['products']?['pageInfo']?['endCursor']"
+                                },
+                                "runAfter": {
+                                    "SetHasNextPage": [
+                                        "SUCCEEDED"
+                                    ]
+                                }
+                            },
+                            "SetHasNextPage": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                    "name": "HasNextPage",
+                                    "value": "@body('ParseProductsFromProductManagement')?['data']?['products']?['pageInfo']?['hasNextPage']"
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {}
+                        },
+                        "runAfter": {
+                            "ParseProductsFromProductManagement": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    }
+                },
+                "runAfter": {
+                    "InitializeQuery": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "InitializeHasNextPage": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "HasNextPage",
+                            "type": "boolean",
+                            "value": false
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "InitializeLastProductID": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "InitializeCursor": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Cursor",
+                            "type": "string",
+                            "value": "\"\""
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "InitializeHasNextPage": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "InitializeQuery": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Query",
+                            "type": "string",
+                            "value": "query"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "InitializeCursor": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "IfProductIDChanged": {
+                "type": "If",
+                "expression": {
+                    "and": [
+                        {
+                            "not": {
+                                "equals": [
+                                    "@variables('ProductID')",
+                                    "@variables('LastProductID')"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "actions": {
+                    "Insert_or_Update_Entity": {
+                        "type": "ServiceProvider",
+                        "inputs": {
+                            "parameters": {
+                                "tableName": "ProductManagementConsumer",
+                                "entity": {
+                                    "PartitionKey": "1",
+                                    "RowKey": "@string(sub(ticks(parseDateTime('9999-12-31T23:59:59')), ticks(utcNow())))",
+                                    "ProductID": "@variables('LastProductID')"
+                                }
+                            },
+                            "serviceProviderConfiguration": {
+                                "connectionName": "azureTables",
+                                "operationId": "upsertEntity",
+                                "serviceProviderId": "/serviceProviders/azureTables"
+                            }
+                        }
+                    }
+                },
+                "else": {
+                    "actions": {}
+                },
+                "runAfter": {
+                    "Until": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "InitializeLastProductID": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "LastProductID",
+                            "type": "integer",
+                            "value": "@variables('ProductID')"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Condition": [
+                        "SUCCEEDED"
+                    ]
+                }
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "triggers": {
+            "Recurrence": {
+                "type": "Recurrence",
+                "recurrence": {
+                    "interval": 1,
+                    "frequency": "Day",
+                    "timeZone": "Eastern Standard Time",
+                    "startTime": "2023-01-01T00:00:00Z",
+                    "schedule": {
+                        "hours": [
+                            "0"
+                        ],
+                        "minutes": [
+                            0
+                        ]
+                    }
+                }
+            }
+        },
+        "parameters": {
+            "ProductManagementServiceURL": {
+                "type": "String",
+                "value": "@appsetting('ProductManagementServiceURL')",
+                "defaultValue": "@appsetting('ProductManagementServiceURL')"
+            }
+        }
+    },
+    "kind": "Stateful"
+}

@@ -1,0 +1,119 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "HTTP": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "@parameters('SalesManagementServiceURL')",
+                    "method": "POST",
+                    "headers": {
+                        "Content-Type": "application/json"
+                    },
+                    "body": "@concat('{\"query\": \"', variables('QueryPart1'), body('ParseMessage')?['Product'], variables('QueryPart2'), '\"}')"
+                },
+                "runAfter": {
+                    "InitializeQueryPart2": [
+                        "SUCCEEDED"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "ParseMessage": {
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@triggerBody()?['contentData']",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "Product": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "runAfter": {}
+            },
+            "InitializeQueryPart1": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "QueryPart1",
+                            "type": "string",
+                            "value": "mutation { upsertProduct(input: { description: \\\""
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "ParseMessage": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "InitializeQueryPart2": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "QueryPart2",
+                            "type": "string",
+                            "value": "\\\" }) { product { productId }}}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "InitializeQueryPart1": [
+                        "SUCCEEDED"
+                    ]
+                }
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "triggers": {
+            "When_messages_are_available_in_a_queue": {
+                "type": "ServiceProvider",
+                "inputs": {
+                    "parameters": {
+                        "queueName": "@parameters('SalesManagementQueue')",
+                        "isSessionsEnabled": false
+                    },
+                    "serviceProviderConfiguration": {
+                        "connectionName": "serviceBus",
+                        "operationId": "receiveQueueMessages",
+                        "serviceProviderId": "/serviceProviders/serviceBus"
+                    }
+                },
+                "splitOn": "@triggerOutputs()?['body']"
+            }
+        },
+        "parameters": {
+            "ProductManagementServiceURL": {
+                "type": "String",
+                "value": "@appsetting('ProductManagementServiceURL')",
+                "defaultValue": "@appsetting('ProductManagementServiceURL')"
+            },
+            "ProductManagementQueue": {
+                "type": "String",
+                "value": "@appsetting('ProductManagementQueue')",
+                "defaultValue": "@appsetting('ProductManagementQueue')"
+            },
+            "SalesManagementQueue": {
+                "type": "String",
+                "value": "@appsetting('SalesManagementQueue')",
+                "defaultValue": "@appsetting('SalesManagementQueue')"
+            },
+            "SalesManagementServiceURL": {
+                "type": "String",
+                "value": "@appsetting('SalesManagementServiceURL')",
+                "defaultValue": "@appsetting('SalesManagementServiceURL')"
+            }
+        }
+    },
+    "kind": "Stateful"
+}

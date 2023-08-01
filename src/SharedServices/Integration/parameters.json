@@ -1,0 +1,18 @@
+{
+  "ProductManagementServiceURL": {
+    "type": "String",
+    "value": "@appsetting('ProductManagementServiceURL')"
+  },
+  "ProductManagementQueue": {
+    "type": "String",
+    "value": "@appsetting('ProductManagementQueue')"
+  },
+  "SalesManagementQueue": {
+    "type": "String",
+    "value": "@appsetting('SalesManagementQueue')"
+  },
+  "SalesManagementServiceURL": {
+    "type": "String",
+    "value": "@appsetting('SalesManagementServiceURL')"
+  }
+}
