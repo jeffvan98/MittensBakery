@@ -9,7 +9,7 @@ This project is comprised of three systems:
 
 ![Architecture Diagram](/bin/Architecture.png)
 
-Product Management is a small database based on a Products data model described by Len Silverston in, ["The Data Model Resource Book."](https://www.wiley.com/en-us/The+Data+Model+Resource+Book%2C+Volume+1%3A+A+Library+of+Universal+Data+Models+for+All+Enterprises%2C+Revised+Edition-p-9780471380238)  It is supported by a small [GraphQL](https://graphql.org/) API built with [dotnet](https://dotnet.microsoft.com/en-us/), and the [Hot Chocolate](https://chillicream.com/) library provided by [ChilliCream](https://chillicream.com/).
+Product Management is a small database based on a Products data model described by Len Silverston in, ["The Data Model Resource Book."](https://www.wiley.com/en-us/The+Data+Model+Resource+Book%2C+Volume+1%3A+A+Library+of+Universal+Data+Models+for+All+Enterprises%2C+Revised+Edition-p-9780471380238)  It is supported by a small [GraphQL](https://graphql.org/) API built with [dotnet](https://dotnet.microsoft.com/en-us/), and the [Hot Chocolate](https://chillicream.com/) library provided by [ChilliCream](https://chillicream.com/).  This API is designed to run as a container and hosted in [Azure Container Apps](https://learn.microsoft.com/en-us/azure/container-apps/overview).  [Azure Container Registry](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-intro) supports building and deploying the API.
 
 Sales Management is very similar to Product Management.  However, it is based on a Sales Order data model, also described by Len Silverston.  Like Product Management, Sales Management is supported by a small GraphQL API.
 
